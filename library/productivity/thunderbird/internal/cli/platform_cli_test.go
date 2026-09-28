@@ -518,6 +518,7 @@ func TestPlatformCLIConformanceSurfaceAndGate(t *testing.T) {
 	}
 
 	t.Setenv("PRINTING_PRESS_CLIENT_PROFILE", "tenant-a")
+	t.Setenv(mcpBoundProfileEnv, "")
 	if err := BindMCPServerProfile(); err != nil {
 		t.Fatal(err)
 	}

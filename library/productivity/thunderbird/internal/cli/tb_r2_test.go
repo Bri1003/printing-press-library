@@ -257,7 +257,10 @@ func TestTBDraftFileFlagsCLIOnly(t *testing.T) {
 	if err := os.WriteFile(secret, []byte("local secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"body-file", "attach"} {
+	if _, exposed := tool.Tool.InputSchema.Properties["attach"]; !exposed {
+		t.Error("MCP schema does not expose attach")
+	}
+	for _, name := range []string{"body-file"} {
 		if _, exposed := tool.Tool.InputSchema.Properties[name]; exposed {
 			t.Errorf("MCP schema exposes %q", name)
 		}
