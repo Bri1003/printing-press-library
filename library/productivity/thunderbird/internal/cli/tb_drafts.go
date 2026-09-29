@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/cliutil"
 	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/tbprofile"
-	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -48,7 +48,8 @@ type tbComposeSpec struct {
 	Bcc            []string       `json:"bcc"`
 	Subject        string         `json:"subject"`
 	Body           string         `json:"body"`
-	Attachments    []string       `json:"attachments"`
+	HTML           bool           `json:"html,omitempty"`
+	Attachments   []string       `json:"attachments"`
 	InReplyTo      string         `json:"in_reply_to,omitempty"`
 	References     []string       `json:"references,omitempty"`
 	ReplyToID      string         `json:"reply_to_id,omitempty"`
@@ -131,7 +132,11 @@ func tbComposeArg(s *tbComposeSpec) string {
 	if s.Identity != nil {
 		add("preselectid", s.Identity.ID)
 	}
-	add("format", "text")
+	if s.HTML {
+		add("format", "html")
+	} else {
+		add("format", "text")
+	}
 	return strings.Join(parts, ",")
 }
 
@@ -536,7 +541,7 @@ func newTBDraftsCmd(flags *rootFlags) *cobra.Command {
 func newTBDraftsNewCmd(flags *rootFlags) *cobra.Command {
 	var to, cc, bcc, attach []string
 	var subject, body, bodyFile, fromIdentity string
-	var open bool
+	var open, html bool
 	cmd := &cobra.Command{
 		Use:   "new",
 		Short: "Prepare a new message for Thunderbird's compose window",
@@ -546,7 +551,9 @@ CLI's data directory and opens the compose window; nothing is ever sent.
 --from-identity takes an identity email or key (idN) from accounts.
 --attach <path> (repeatable) attaches a local file; through MCP it takes a
 comma-separated list and only files inside the user's Documents folder are
-accepted. --body-file <path> reads the body from a file (CLI only).`,
+accepted. --body-file <path> reads the body from a file (through MCP only files
+inside Documents). --html treats the body as HTML and keeps the identity's
+HTML signature (bold text, signature image).`,
 		Example: strings.Trim(`
   thunderbird-pp-cli drafts new --to alice@example.com --subject "Budget review" --body "Hi Alice,"
   thunderbird-pp-cli drafts new --to alice@example.com --cc carol@example.com --from-identity id1 --json
@@ -565,7 +572,7 @@ accepted. --body-file <path> reads the body from a file (CLI only).`,
 			if body != "" && bodyFile != "" {
 				return usageErr(errors.New("use either --body or --body-file, not both"))
 			}
-			s := &tbComposeSpec{Subject: subject, Body: body}
+			s := &tbComposeSpec{Subject: subject, Body: body, HTML: html}
 			var err error
 			if s.To, err = tbParseRecipients(to); err != nil {
 				return usageErr(err)
@@ -576,14 +583,20 @@ accepted. --body-file <path> reads the body from a file (CLI only).`,
 			if s.Bcc, err = tbParseRecipients(bcc); err != nil {
 				return usageErr(err)
 			}
+			mcpSurface := tbMCPSurface()
 			if bodyFile != "" {
-				b, err := os.ReadFile(filepath.Clean(bodyFile))
+				bodyPath := filepath.Clean(bodyFile)
+				if mcpSurface {
+					if bodyPath, err = tbResolveMCPFile("--body-file", bodyFile); err != nil {
+						return usageErr(err)
+					}
+				}
+				b, err := os.ReadFile(bodyPath)
 				if err != nil {
 					return usageErr(fmt.Errorf("--body-file: %w", err))
 				}
 				s.Body = string(b)
 			}
-			mcpSurface := tbMCPSurface()
 			if mcpSurface {
 				attach = tbSplitMCPAttachments(attach)
 			}
@@ -620,9 +633,9 @@ accepted. --body-file <path> reads the body from a file (CLI only).`,
 	cmd.Flags().StringArrayVar(&bcc, "bcc", nil, "Bcc recipient (repeatable)")
 	cmd.Flags().StringVar(&subject, "subject", "", "Subject")
 	cmd.Flags().StringVar(&body, "body", "", "Plain-text body")
-	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read the plain-text body from this file")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "", "Read the body from this file (via MCP: a file inside Documents)")
 	cmd.Flags().StringArrayVar(&attach, "attach", nil, "File to attach (repeatable; via MCP a comma-separated list of files inside Documents)")
-	_ = cmd.Flags().MarkHidden("body-file")
+	cmd.Flags().BoolVar(&html, "html", false, "Treat the body as HTML (keeps the identity's HTML signature)")
 	cmd.Flags().StringVar(&fromIdentity, "from-identity", "", "Sending identity: email or key like id1")
 	cmd.Flags().BoolVar(&open, "open", false, "Open the Thunderbird compose window (otherwise only print the command)")
 	return cmd

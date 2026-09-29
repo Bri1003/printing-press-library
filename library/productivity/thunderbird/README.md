@@ -141,6 +141,7 @@ These capabilities aren't available in any other tool for this API.
 
 ### Inbox intelligence
 - **`drafts new --attach`** — Open a Thunderbird compose window with local files already attached, from the terminal or from an MCP agent (agents are limited to files inside Documents).
+  Add `--html` for an HTML body that keeps the identity's signature, and `--body-file <path>` to read the body from a file (via MCP, files inside Documents only).
 
   _Use it when the user wants a mail prepared with a document attached, ready to review and send themselves._
 
@@ -235,6 +236,14 @@ thunderbird-pp-cli drafts new --to alice@example.com --subject "Report" --attach
 ```
 
 Opens the compose window with the file attached; nothing is sent. Through MCP the `attach` parameter takes a comma-separated list and only accepts files inside the user's Documents folder (symlinks and junctions are resolved first); from the terminal any readable file works.
+
+### Draft a formatted mail (HTML body, signature)
+
+```bash
+thunderbird-pp-cli drafts new --to alice@example.com --subject "Offer" --body-file ~/Documents/offer.html --html --open
+```
+
+`--html` treats the body as HTML (bold text and the like) and keeps the sending identity's HTML signature, including its image. `--body-file` reads the body from a file instead of `--body`. Through MCP both are the `body-file` and `html` parameters, and `body-file` only accepts files inside the user's Documents folder; from the terminal any readable file works.
 
 ## Usage
 

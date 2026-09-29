@@ -7,6 +7,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/server"
+	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/mcp/cobratree"
 )
 
 type tbAttachFixture struct {
@@ -123,5 +126,65 @@ func TestTBTerminalAttachUnrestricted(t *testing.T) {
 	}
 	if len(spec.Attachments) != 1 || spec.Attachments[0] != f.outside {
 		t.Fatalf("attachments = %v", spec.Attachments)
+	}
+}
+
+func TestTBDraftBodyFileHTMLExposedToMCP(t *testing.T) {
+	root := RootCmd()
+	s := server.NewMCPServer("test", "0.0.0")
+	cobratree.RegisterAll(s, root, func() (string, error) { return "missing-binary", nil })
+	tool, ok := s.ListTools()[cobratree.ToolNameForCommand(s, root, "drafts new")]
+	if !ok {
+		t.Fatal("no MCP tool for drafts new")
+	}
+	for _, name := range []string{"attach", "body-file", "html"} {
+		if _, exposed := tool.Tool.InputSchema.Properties[name]; !exposed {
+			t.Errorf("MCP schema does not expose %q", name)
+		}
+	}
+}
+
+func tbDraftBodyFile(t *testing.T, f tbAttachFixture, path string, extra ...string) (tbComposeSpec, string, error) {
+	t.Helper()
+	args := append([]string{"drafts", "new", "--to", "alice@example.com", "--body-file=" + path, "--json"}, extra...)
+	out, errOut, err := tbRun(t, f.home, args...)
+	if err != nil {
+		return tbComposeSpec{}, errOut + err.Error(), err
+	}
+	return tbDecode[tbComposeSpec](t, out), "", nil
+}
+
+func TestTBMCPBodyFileInsideDocumentsAccepted(t *testing.T) {
+	f := tbSetupAttach(t, true)
+	if err := os.WriteFile(f.inside, []byte("<b>Hello</b>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec, msg, err := tbDraftBodyFile(t, f, f.inside, "--html")
+	if err != nil {
+		t.Fatal(msg)
+	}
+	if spec.Body != "<b>Hello</b>" || !spec.HTML {
+		t.Fatalf("draft = %+v", spec)
+	}
+}
+
+func TestTBMCPBodyFileOutsideDocumentsRejected(t *testing.T) {
+	f := tbSetupAttach(t, true)
+	for _, p := range []string{f.outside, filepath.Join(f.docs, "..", "Outside", "secret.txt"), filepath.Join(filepath.Dir(f.docs), "DocumentsX", "x.txt")} {
+		_, msg, err := tbDraftBodyFile(t, f, p)
+		if ExitCode(err) != 2 || !strings.Contains(msg, "Documents folder") {
+			t.Fatalf("body-file %q via MCP: exit %d, %s", p, ExitCode(err), msg)
+		}
+	}
+}
+
+func TestTBTerminalBodyFileUnrestricted(t *testing.T) {
+	f := tbSetupAttach(t, false)
+	spec, msg, err := tbDraftBodyFile(t, f, f.outside)
+	if err != nil {
+		t.Fatal(msg)
+	}
+	if spec.Body != "data" || spec.HTML {
+		t.Fatalf("draft = %+v", spec)
 	}
 }

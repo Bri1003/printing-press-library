@@ -10,9 +10,6 @@ import (
 	"testing"
 	"time"
 
-	mcplib "github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
-	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/mcp/cobratree"
 	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/tbprofile"
 	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/tbprofile/tbtest"
 )
@@ -242,46 +239,6 @@ func TestTBAttachmentSaveC1Filename(t *testing.T) {
 	human, _, err := tbRun(t, s.home, "attachments", "save", id, "--output", t.TempDir(), "--human-friendly")
 	if err != nil || strings.ContainsRune(human, 0x9b) || !strings.Contains(human, "saved ") {
 		t.Fatalf("saved line: %v %q", err, human)
-	}
-}
-
-func TestTBDraftFileFlagsCLIOnly(t *testing.T) {
-	root := RootCmd()
-	s := server.NewMCPServer("test", "0.0.0")
-	cobratree.RegisterAll(s, root, func() (string, error) { return "missing-binary", nil })
-	tool, ok := s.ListTools()[cobratree.ToolNameForCommand(s, root, "drafts new")]
-	if !ok {
-		t.Fatal("no MCP tool for drafts new")
-	}
-	secret := filepath.Join(t.TempDir(), "secret.txt")
-	if err := os.WriteFile(secret, []byte("local secret"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, exposed := tool.Tool.InputSchema.Properties["attach"]; !exposed {
-		t.Error("MCP schema does not expose attach")
-	}
-	for _, name := range []string{"body-file"} {
-		if _, exposed := tool.Tool.InputSchema.Properties[name]; exposed {
-			t.Errorf("MCP schema exposes %q", name)
-		}
-		res, err := tool.Handler(context.Background(), mcplib.CallToolRequest{Params: mcplib.CallToolParams{
-			Arguments: map[string]any{name: secret, "to": "alice@example.com"},
-		}})
-		if err != nil || !res.IsError {
-			t.Fatalf("MCP accepted %q", name)
-		}
-		if txt := res.Content[0].(mcplib.TextContent).Text; !strings.Contains(txt, "unknown MCP parameter") {
-			t.Errorf("%q: %s", name, txt)
-		}
-	}
-	b := tbSetupB(t, false, false)
-	out, _, err := tbRun(t, b.home, "drafts", "new", "--to", "alice@example.com", "--body-file", secret, "--attach", secret, "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec := tbDecode[tbComposeSpec](t, out)
-	if spec.Body != "local secret" || len(spec.Attachments) != 1 || spec.Attachments[0] != secret {
-		t.Fatalf("CLI draft = %+v", spec)
 	}
 }
 
