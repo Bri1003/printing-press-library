@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/mcp/cobratree"
@@ -186,5 +187,47 @@ func TestTBTerminalBodyFileUnrestricted(t *testing.T) {
 	}
 	if spec.Body != "data" || spec.HTML {
 		t.Fatalf("draft = %+v", spec)
+	}
+}
+
+func TestTBSplitMCPAttachmentsKeepsCommaInFilename(t *testing.T) {
+	dir := t.TempDir()
+	comma := filepath.Join(dir, "report,2024.pdf")
+	other := filepath.Join(dir, "b.pdf")
+	for _, p := range []string{comma, other} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := tbSplitMCPAttachments([]string{comma}); len(got) != 1 || got[0] != comma {
+		t.Fatalf("comma filename split: %v", got)
+	}
+	if got := tbSplitMCPAttachments([]string{other + "," + other}); len(got) != 2 {
+		t.Fatalf("list of two files not split: %v", got)
+	}
+}
+
+func TestTBBuildDraftEMLHTMLContentType(t *testing.T) {
+	att := filepath.Join(t.TempDir(), "a.txt")
+	if err := os.WriteFile(att, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		html   bool
+		attach []string
+		want   string
+	}{
+		{true, nil, "text/html"},
+		{false, nil, "text/plain"},
+		{true, []string{att}, "text/html"},
+		{false, []string{att}, "text/plain"},
+	} {
+		eml, err := tbBuildDraftEML(&tbComposeSpec{To: []string{"a@b.it"}, Body: "<b>x</b>", HTML: tc.html, Attachments: tc.attach}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(eml), "Content-Type: "+tc.want+";") {
+			t.Fatalf("html=%v attach=%v: want %s in\n%s", tc.html, tc.attach, tc.want, eml)
+		}
 	}
 }

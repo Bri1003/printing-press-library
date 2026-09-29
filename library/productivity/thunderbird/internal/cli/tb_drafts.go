@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/cliutil"
 	"github.com/mvanhorn/printing-press-library/library/productivity/thunderbird/internal/tbprofile"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -49,7 +49,7 @@ type tbComposeSpec struct {
 	Subject        string         `json:"subject"`
 	Body           string         `json:"body"`
 	HTML           bool           `json:"html,omitempty"`
-	Attachments   []string       `json:"attachments"`
+	Attachments    []string       `json:"attachments"`
 	InReplyTo      string         `json:"in_reply_to,omitempty"`
 	References     []string       `json:"references,omitempty"`
 	ReplyToID      string         `json:"reply_to_id,omitempty"`
@@ -407,8 +407,12 @@ func tbBuildDraftEML(s *tbComposeSpec, now time.Time) ([]byte, error) {
 		}
 		return qp.Close()
 	}
+	subtype := "plain"
+	if s.HTML {
+		subtype = "html"
+	}
 	if len(s.Attachments) == 0 {
-		hdr("Content-Type", "text/plain; charset=utf-8")
+		hdr("Content-Type", "text/"+subtype+"; charset=utf-8")
 		hdr("Content-Transfer-Encoding", "quoted-printable")
 		buf.WriteString("\r\n")
 		if err := text(&buf); err != nil {
@@ -420,7 +424,7 @@ func tbBuildDraftEML(s *tbComposeSpec, now time.Time) ([]byte, error) {
 	mw := multipart.NewWriter(&body)
 	hdr("Content-Type", "multipart/mixed; boundary=\""+mw.Boundary()+"\"")
 	buf.WriteString("\r\n")
-	tp, err := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/plain; charset=utf-8"}, "Content-Transfer-Encoding": {"quoted-printable"}})
+	tp, err := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/" + subtype + "; charset=utf-8"}, "Content-Transfer-Encoding": {"quoted-printable"}})
 	if err != nil {
 		return nil, err
 	}

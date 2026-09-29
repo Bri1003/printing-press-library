@@ -43,6 +43,10 @@ func tbResolveMCPFile(flag, p string) (string, error) {
 func tbSplitMCPAttachments(values []string) []string {
 	var out []string
 	for _, v := range values {
+		if info, err := os.Stat(strings.TrimSpace(v)); err == nil && !info.IsDir() {
+			out = append(out, strings.TrimSpace(v))
+			continue
+		}
 		for _, part := range strings.Split(v, ",") {
 			if part = strings.TrimSpace(part); part != "" {
 				out = append(out, part)
